@@ -34,8 +34,8 @@ Edit `.env` values:
 - `TRANSLATION_PROVIDER=mock` (or `openai`)
 - `HANDOFF_DRY_RUN=true` for local MVP checks
 - `ELEVENLABS_HANDOFF_SECRET=...`
-- `REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF=true` (recommended default)
-- `ENABLE_CUSTOMER_RECONNECT=false` (recommended default)
+- `REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF=false` (default callback fallback enabled)
+- `ENABLE_CUSTOMER_RECONNECT=true` (recommended for managed-service reliability)
 - if using OpenAI:
   - `OPENAI_API_KEY=...`
   - `OPENAI_TRANSLATION_MODEL=gpt-4.1-mini`

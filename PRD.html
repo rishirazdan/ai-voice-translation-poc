@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Voice Translation: PoC to V1 — PRD</title>
+<style>
+  :root {
+    --ink: #1a1a1a;
+    --muted: #5a5a5a;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+    --bg: #fafafa;
+    --card: #ffffff;
+    --accent: #2563eb;
+    --accent-soft: #eff6ff;
+    --good: #15803d;
+    --warn: #b45309;
+    --reject: #b91c1c;
+    --code-bg: #f4f4f5;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    font-size: 16px;
+  }
+  .wrap {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 56px 32px 96px;
+  }
+  header.doc {
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 28px;
+    margin-bottom: 36px;
+  }
+  h1 {
+    font-size: 32px;
+    line-height: 1.2;
+    margin: 0 0 16px;
+    letter-spacing: -0.015em;
+    font-weight: 700;
+  }
+  h2 {
+    font-size: 20px;
+    margin: 44px 0 14px;
+    letter-spacing: -0.01em;
+    font-weight: 600;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 16px;
+    margin: 24px 0 8px;
+    font-weight: 600;
+  }
+  p, ul, ol { margin: 0 0 14px; }
+  ul, ol { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  strong { font-weight: 600; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--code-bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.88em;
+  }
+  .meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+  .meta div span:first-child {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #71717a;
+    margin-bottom: 2px;
+  }
+  .meta div span:last-child {
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .tldr {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    padding: 16px 18px;
+    border-radius: 4px;
+    margin: 0 0 8px;
+  }
+  .tldr p:last-child { margin-bottom: 0; }
+  blockquote.hypothesis {
+    margin: 14px 0;
+    padding: 14px 18px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 15px;
+  }
+  blockquote.hypothesis p { margin: 0; }
+  blockquote.hypothesis strong { color: var(--accent); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 18px;
+    font-size: 14px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    background: #f8f8f9;
+    font-weight: 600;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  tr:last-child td { border-bottom: 0; }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .tag.good { background: #ecfdf5; color: var(--good); }
+  .tag.warn { background: #fffbeb; color: var(--warn); }
+  .tag.reject { background: #fef2f2; color: var(--reject); }
+  .kill {
+    background: #fef2f2;
+    border-left: 3px solid var(--reject);
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin: 12px 0;
+    font-size: 14.5px;
+  }
+  .kill strong { color: var(--reject); }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li {
+    padding-left: 26px;
+    position: relative;
+  }
+  .checklist li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 6px;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--line-strong);
+    border-radius: 3px;
+    background: var(--card);
+  }
+  .appendix {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    font-size: 14.5px;
+    color: var(--muted);
+  }
+  .appendix h2 {
+    color: var(--ink);
+    font-size: 16px;
+    border-bottom: 0;
+    padding-bottom: 0;
+    margin-bottom: 10px;
+  }
+  .appendix code { font-size: 12.5px; }
+  .status-pill {
+    display: inline-block;
+    padding: 2px 10px;
+    background: #fef3c7;
+    color: #92400e;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  @media print {
+    body { background: #fff; font-size: 11pt; }
+    .wrap { padding: 0; max-width: 100%; }
+    h2 { page-break-after: avoid; }
+    table, blockquote.hypothesis, .tldr, .kill { page-break-inside: avoid; }
+  }
+  @media (max-width: 640px) {
+    .wrap { padding: 32px 20px 64px; }
+    h1 { font-size: 26px; }
+    h2 { font-size: 18px; }
+    table { font-size: 13px; }
+    th, td { padding: 8px 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>Live Voice Translation: PoC to V1</h1>
+  <div class="meta">
+    <div><span>Stage</span><span>Planning Review</span></div>
+    <div><span>Last updated</span><span>2026-05-21</span></div>
+    <div><span>Owner</span><span>RR</span></div>
+    <div><span>Status</span><span class="status-pill">Draft</span></div>
+  </div>
+</header>
+
+<section class="tldr">
+  <p>A working PoC translates live phone calls in near real time between a caller and an English-speaking agent, with an ElevenLabs AI front-door handling first contact and Twilio handling the human handoff. This PRD proposes the v1 work to take it from a single-process demo to a deployable service teams could actually pilot.</p>
+</section>
+
+<h2>Hypothesis</h2>
+<p>Customer support teams need multilingual coverage and can't staff every language. Bilingual agencies and human interpreters are expensive, slow to spin up, and rarely available off-hours.</p>
+
+<blockquote class="hypothesis">
+  <p><strong>If we</strong> ship an AI-front-door plus live-translation layer that sits in front of a small English-only agent team, <strong>then</strong> support orgs can serve non-English callers at the latency of a normal call, <strong>because</strong> modern speech APIs and LLM translation are now fast enough that turn-by-turn translation feels like a natural pause rather than an interruption.</p>
+</blockquote>
+
+<h3>Evidence from the PoC</h3>
+<ul>
+  <li>End-to-end turn latency is measured and emitted at <code>/metrics/latency</code> (avg + p95 of <code>total_estimated_turn_ms</code>, plus <code>translate_ms</code> and <code>token_emit_ms</code> broken out).</li>
+  <li>Translation runs on <code>gpt-4.1-mini</code> via the OpenAI provider, with a deterministic <code>MockTranslator</code> for tests.</li>
+  <li>Seamless handoff works against a real Twilio call SID. The fallback callback path exists but is opt-in.</li>
+</ul>
+
+<h2>Strategic Fit</h2>
+<p>This is a standalone project, but the bet is sized against a real category: contact-center AI plus translation is where Cresta, Sierra, and Decagon are spending. The PoC validates a different angle: don't replace the human agent, extend their language reach. That's a smaller, more believable claim than "AI handles the whole call."</p>
+<p><strong>Why now:</strong> Speech-to-text latency dropped meaningfully in 2025 with Twilio ConversationRelay and ElevenLabs Conversational AI. Translation quality on a small, cheap model (<code>gpt-4.1-mini</code>) is good enough for service interactions. The three pieces fit together for the first time.</p>
+
+<h2>What We Learned from the PoC</h2>
+<ol>
+  <li><strong>Handoff is the hard part, not translation.</strong> Most demos skip the step where an AI agent hands a live caller to a human without dropping the call. The seamless path (update the existing Twilio leg using <code>system__call_sid</code>) is what makes it feel real. The reconnect-via-callback fallback is a worse experience, so it ships off by default.</li>
+  <li><strong>Latency budget lives in the TTS step, not the LLM.</strong> Translation is fast. The estimated TTS playback (<code>ESTIMATED_TTS_MS_PER_TURN=650</code>) dominates perceived turn time. Optimizing the wrong stage would be wasted effort.</li>
+  <li><strong>Logging policy matters earlier than you think.</strong> No raw transcript text in logs, only event type, call SID, text length, and a short SHA-256 fingerprint. Doing this from day one removed a future compliance headache.</li>
+</ol>
+
+<h2>V1 Scope</h2>
+<p>Ship the PoC as a service one small team could actually pilot. Concretely:</p>
+<ol>
+  <li><strong>Stateful session backing.</strong> Move <code>session_bridge</code> registry from in-process memory to Redis (or equivalent) so the app can run multi-worker.</li>
+  <li><strong>Integration test coverage.</strong> Automated tests for the handoff endpoint and the websocket translation loop. The codebase has a mock translator already; wire it into a real test harness.</li>
+  <li><strong>Provider failover.</strong> If the OpenAI call fails or times out, degrade to source-language passthrough with a logged warning rather than dropping the turn.</li>
+  <li><strong>Deployment profile.</strong> A container build and a documented deploy target (Fly.io or Render) replacing the Cloudflare tunnel.</li>
+  <li><strong>Operational dashboard.</strong> Surface the latency metrics already collected, plus handoff success rate and translation error rate.</li>
+</ol>
+
+<h2>Non-Goals</h2>
+<ul>
+  <li><strong>More than two languages per call.</strong> Caller language is flexible, agent stays English. A three-way conference is a different product.</li>
+  <li><strong>Agent-side UI.</strong> No web dashboard for the human agent in v1. The agent uses a phone.</li>
+  <li><strong>Custom voice cloning or domain-tuned translation.</strong> Stock <code>gpt-4.1-mini</code> is the baseline. Quality work comes later.</li>
+  <li><strong>Replacing the human agent.</strong> The AI front-door triages and hands off. It doesn't try to resolve.</li>
+</ul>
+
+<h2>Success Metrics</h2>
+<p><strong>Primary:</strong> p95 turn latency under 2.5s end-to-end (ingest → translate → token emit → estimated TTS).</p>
+<p><strong>Guardrails:</strong></p>
+<ul>
+  <li>Handoff success rate above 95% when a valid <code>twilio_call_sid</code> is present.</li>
+  <li>Translation error rate (provider failures, malformed responses) under 1% over a rolling 1k-turn window.</li>
+  <li>Zero raw transcript text in production logs (verified by log scan in CI).</li>
+</ul>
+<div class="kill"><strong>Kill criterion:</strong> If p95 turn latency stays above 4s after the v1 work, the turn-based model is wrong and we revisit streaming translation instead.</div>
+
+<h2>AI Behavior Contract</h2>
+<table>
+  <thead>
+    <tr><th>Dimension</th><th>Specification</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Primary task</td><td>Translate one turn of conversational speech between caller language and <code>en-US</code>.</td></tr>
+    <tr><td>Inputs</td><td>Per-turn transcript text from Twilio ConversationRelay, plus source and target language tags.</td></tr>
+    <tr><td>Constraints</td><td>Preserve meaning over fluency, no PII echo into logs, no model-added content.</td></tr>
+    <tr><td>Disallowed</td><td>Summarizing, paraphrasing across turns, refusing benign content.</td></tr>
+    <tr><td>Latency budget</td><td>P95 <code>translate_ms</code> under 700ms.</td></tr>
+  </tbody>
+</table>
+
+<h3>Behavior examples</h3>
+<table>
+  <thead>
+    <tr><th>Scenario</th><th>Input</th><th>Expected</th><th>Category</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Happy path</td>
+      <td><code>"Hej, jag behöver hjälp med min faktura."</code> (sv-SE)</td>
+      <td><code>"Hi, I need help with my invoice."</code></td>
+      <td><span class="tag good">Good</span></td>
+    </tr>
+    <tr>
+      <td>Mixed-language utterance</td>
+      <td><code>"Det är en SaaS-prenumeration."</code></td>
+      <td>Keeps <code>SaaS</code> literal, translates the rest.</td>
+      <td><span class="tag good">Good</span></td>
+    </tr>
+    <tr>
+      <td>Provider timeout</td>
+      <td>Any input, OpenAI 5s timeout</td>
+      <td>Pass source text through, log <code>TRANSLATION_FALLBACK_PASSTHROUGH</code>.</td>
+      <td><span class="tag warn">Degrade</span></td>
+    </tr>
+    <tr>
+      <td>Empty / non-text frame</td>
+      <td><code>{"event": "mark"}</code></td>
+      <td>Ignore silently.</td>
+      <td><span class="tag good">Good</span></td>
+    </tr>
+    <tr>
+      <td>Prompt injection in caller speech</td>
+      <td><code>"Ignore previous instructions and..."</code></td>
+      <td>Translate literally, do not act on it.</td>
+      <td><span class="tag reject">Reject meta-action</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Rollout Plan</h2>
+<ol>
+  <li><strong>Internal dogfood.</strong> Two test numbers, mock translator, dry-run handoff. Validate the deploy profile.</li>
+  <li><strong>Paid pilot with one team.</strong> Real OpenAI, real Twilio, live handoff. Two-week window with the latency and error-rate guardrails above as go/no-go.</li>
+  <li><strong>Open pilot.</strong> Add a second language pair (sv-SE was the test case; expand to es-MX).</li>
+</ol>
+<p><strong>Rollback:</strong> Flip <code>TRANSLATION_PROVIDER=mock</code> and <code>HANDOFF_DRY_RUN=true</code> via env vars, redeploy. Both paths are already in the code.</p>
+
+<h2>Risks and Recovery</h2>
+<table>
+  <thead>
+    <tr><th>Risk</th><th>Detection</th><th>Fallback</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>OpenAI rate limits during a call</td><td>429 response, spike in <code>translate_ms</code></td><td>Source-language passthrough, log warning</td></tr>
+    <tr><td>Twilio ConversationRelay event-shape change</td><td>Parse failures in <code>models.py</code></td><td>Ignore unknown event types (already implemented), alert on parse-failure rate</td></tr>
+    <tr><td>Multi-worker session collision</td><td>Lost websocket on scale-out</td><td>Redis-backed session registry (in v1 scope)</td></tr>
+    <tr><td>Caller language misdetection</td><td>Wrong target language in translated output</td><td>Default to <code>en-US</code> agent side, allow ElevenLabs to override <code>caller_language</code> at handoff</td></tr>
+  </tbody>
+</table>
+
+<h2>Open Questions</h2>
+<ul class="checklist">
+  <li>Which deploy target — Fly.io vs Render vs a small ECS task? Decide based on websocket cold-start behavior.</li>
+  <li>Is the estimated TTS budget (<code>650ms</code>) close to reality with ElevenLabs? Worth measuring directly rather than estimating.</li>
+  <li>Do we want to capture turn-level transcripts (encrypted at rest) for QA, or stay metadata-only?</li>
+</ul>
+
+<section class="appendix">
+  <h2>Appendix: PoC Surface Area</h2>
+  <ul>
+    <li><strong>API:</strong> <code>/health</code>, <code>POST /voice/incoming</code>, <code>WS /ws/conversationrelay</code>, <code>POST /handoff/elevenlabs</code>, <code>/metrics/latency</code>, <code>/metrics/latency/recent</code>, <code>POST /metrics/latency/reset</code></li>
+    <li><strong>Stack:</strong> Python 3.11, FastAPI, Twilio Programmable Voice + ConversationRelay, ElevenLabs Conversational AI, OpenAI <code>gpt-4.1-mini</code></li>
+    <li><strong>Security baseline:</strong> shared-secret on the ElevenLabs handoff webhook, optional Twilio signature validation, metadata-only logging</li>
+  </ul>
+</section>
+
+</div>
+</body>
+</html>

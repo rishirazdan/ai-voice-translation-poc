@@ -97,10 +97,10 @@ class Settings:
             twilio_handoff_from_number=os.getenv("TWILIO_HANDOFF_FROM_NUMBER", ""),
             default_human_agent_number=os.getenv("DEFAULT_HUMAN_AGENT_NUMBER", ""),
             require_active_call_sid_for_handoff=_as_bool(
-                os.getenv("REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF"), True
+                os.getenv("REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF"), False
             ),
             handoff_dry_run=_as_bool(os.getenv("HANDOFF_DRY_RUN"), True),
-            enable_customer_reconnect=_as_bool(os.getenv("ENABLE_CUSTOMER_RECONNECT"), False),
+            enable_customer_reconnect=_as_bool(os.getenv("ENABLE_CUSTOMER_RECONNECT"), True),
             customer_reconnect_announcement=os.getenv(
                 "CUSTOMER_RECONNECT_ANNOUNCEMENT",
                 (

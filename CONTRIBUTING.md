@@ -28,4 +28,4 @@ Thanks for contributing to this PoC.
    - agent is English (`DEFAULT_AGENT_LANGUAGE`)
 3. For handoff behavior:
    - seamless mode requires active `twilio_call_sid`
-   - callback fallback must be explicit opt-in
+   - callback fallback is enabled by default unless strict SID mode is enforced

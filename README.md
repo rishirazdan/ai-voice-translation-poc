@@ -1,44 +1,98 @@
-# Live Translation PoC (ConversationRelay)
+# Live Voice Translation PoC (ElevenLabs + Twilio + OpenAI)
 
-This repository is a **PoC** for near-real-time human-to-human call translation using ElevenLabs + Twilio ConversationRelay.
+Near-real-time bilingual call support PoC with AI-first intake and human handoff.
 
-## Current behavior
+## Resume Summary
 
-1. Caller can speak any language (`caller_language=auto` supported).
-2. Human agent side is fixed to English (`DEFAULT_AGENT_LANGUAGE=en-US`).
-3. Twilio ConversationRelay streams utterances to websocket.
-4. Backend translates text and returns translated tokens for playback.
-5. ElevenLabs can trigger handoff through `POST /handoff/elevenlabs`.
+Built a live call translation MVP that:
 
-## Handoff modes
+1. starts on an ElevenLabs conversational AI phone agent,
+2. hands off to a human Twilio agent,
+3. translates both sides of the call in near real time,
+4. keeps agent workflow fixed in English while caller language stays flexible.
 
-1. **Primary (default): seamless transfer**
-   - Requires valid `twilio_call_sid` from ElevenLabs runtime (`system__call_sid`).
-   - No customer callback leg is created.
-2. **Backup (opt-in): customer reconnect callback**
-   - Controlled by `ENABLE_CUSTOMER_RECONNECT=true`.
-   - Intended for emergency fallback only.
-   - Emits explicit warning logs when used.
+## Problem and Goal
 
-## Endpoints
+Customer support teams need multilingual coverage without staffing every language.
 
-- `GET /health`
-- `POST /voice/incoming`
-- `WS /ws/conversationrelay`
-- `POST /handoff/elevenlabs`
-- `GET /metrics/latency`
-- `GET /metrics/latency/recent`
-- `POST /metrics/latency/reset`
+This project demonstrates:
 
-## Security baseline
+1. AI front-door triage,
+2. seamless escalation to a human,
+3. bilingual turn-by-turn translation during the live call.
 
-1. No raw transcript text is persisted in logs.
-2. ElevenLabs webhook shared-secret validation:
-   - `REQUIRE_ELEVENLABS_HANDOFF_SECRET=true`
-   - header: `X-ElevenLabs-Handoff-Secret`
-3. Twilio signature validation is supported for inbound voice webhooks:
-   - `REQUIRE_TWILIO_SIGNATURE=true`
+## Architecture
 
-## Quick start
+See full design in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-See [SETUP.md](./SETUP.md).
+High-level flow:
+
+1. Customer calls ElevenLabs number.
+2. ElevenLabs triggers handoff webhook when human agent is needed.
+3. FastAPI orchestrator updates/creates Twilio call legs.
+4. Twilio ConversationRelay streams transcript events to websocket.
+5. Backend translates text and sends translated tokens back for TTS playback.
+
+## Key Features
+
+1. **Seamless handoff (preferred path)**
+   - Uses active `twilio_call_sid` from ElevenLabs (`system__call_sid`) when present.
+2. **Automatic reconnect fallback (default path when SID is missing)**
+   - Enabled by default with `ENABLE_CUSTOMER_RECONNECT=true`.
+   - Can be disabled by setting `REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF=true`.
+   - Emits explicit fallback warning logs.
+3. **Agent-side language policy**
+   - Agent remains English (`DEFAULT_AGENT_LANGUAGE=en-US`).
+   - Caller language can be auto-detected (`caller_language=auto`).
+4. **Provider abstraction**
+   - `mock` translator for deterministic testing.
+   - `openai` translator for live translation.
+5. **Security and privacy baseline**
+   - Shared-secret validation for ElevenLabs webhook.
+   - Optional Twilio signature validation.
+   - Metadata-only logging (no raw transcript logging).
+
+## Tech Stack
+
+1. Python, FastAPI, Uvicorn
+2. Twilio Programmable Voice + ConversationRelay
+3. ElevenLabs Conversational AI
+4. OpenAI API (`gpt-4.1-mini` for translation)
+5. PowerShell automation scripts
+6. Cloudflare Tunnel for local webhook exposure
+
+## API Endpoints
+
+1. `GET /health`
+2. `POST /voice/incoming`
+3. `WS /ws/conversationrelay`
+4. `POST /handoff/elevenlabs`
+5. `GET /metrics/latency`
+6. `GET /metrics/latency/recent`
+7. `POST /metrics/latency/reset`
+
+## Local Setup
+
+Use [SETUP.md](./SETUP.md) for end-to-end setup and test steps.
+
+## Suggested Demo Assets
+
+For portfolio/recruiter review, add:
+
+1. 2-3 minute demo video link,
+2. screenshot of ElevenLabs handoff tool config,
+3. screenshot of live terminal logs showing websocket translation events,
+4. short outcomes section (latency range, handoff success behavior, known limits).
+
+## Current Limitations
+
+1. PoC-level runtime resilience (single-process, in-memory session state).
+2. Tunnel-based local exposure for demos (not production hosting).
+3. No persistent conversation storage/analytics pipeline.
+
+## Next Milestones
+
+1. Add automated integration tests for handoff + websocket flows.
+2. Add robust failover/retry behavior for transient provider failures.
+3. Move session state to shared storage for multi-worker deployment.
+4. Add production deployment profile and observability dashboards.

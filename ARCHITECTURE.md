@@ -107,16 +107,19 @@ flowchart LR
    - dry-run mode: generates deterministic fake SIDs for local testing
    - live mode:
      - primary path updates existing Twilio caller leg using `twilio_call_sid`
-     - optional fallback re-dials customer leg only when explicitly enabled
+     - default fallback re-dials customer leg when SID is missing (`ENABLE_CUSTOMER_RECONNECT=true`)
      - dials human agent leg
      - joins legs in conference
 4. API returns handoff metadata (conference name, session id, call SIDs).
 
 ### Seamless handoff guardrails
 
-1. `REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF=true` enforces seamless transfer mode.
-2. If `twilio_call_sid` is missing or invalid, request is rejected with a clear `400` message.
-3. Backup callback path is opt-in (`ENABLE_CUSTOMER_RECONNECT=true`) and logs `FALLBACK_RECONNECT_USED`.
+1. Default operating mode allows callback fallback when SID is missing:
+   - `REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF=false`
+   - `ENABLE_CUSTOMER_RECONNECT=true`
+2. Strict seamless-only mode is optional:
+   - set `REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF=true` to require live SID and reject missing SID requests.
+3. Callback fallback is explicitly observable and logs `FALLBACK_RECONNECT_USED`.
 
 ## End-to-end translation sequence (live call)
 
