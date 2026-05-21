@@ -70,6 +70,7 @@ def parse_conversationrelay_event(payload: dict[str, Any]) -> ConversationRelayE
         payload.get("sourceLanguage")
         or payload.get("source_language")
         or payload.get("language")
+        or payload.get("lang")
     )
     target_language = payload.get("targetLanguage") or payload.get("target_language")
 
@@ -90,7 +91,7 @@ def safe_text_fingerprint(text: str | None) -> dict[str, Any]:
     return {"length": len(text), "sha256_12": digest}
 
 
-def build_token_messages(text: str) -> list[dict[str, Any]]:
+def build_token_messages(text: str, *, lang: str | None = None) -> list[dict[str, Any]]:
     if not text.strip():
         return []
 
@@ -98,11 +99,13 @@ def build_token_messages(text: str) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for index, part in enumerate(parts):
         token = part + (" " if index < len(parts) - 1 else "")
-        result.append(
-            {
-                "type": "text",
-                "token": token,
-                "last": index == len(parts) - 1,
-            }
-        )
+        message: dict[str, Any] = {
+            "type": "text",
+            "token": token,
+            "last": index == len(parts) - 1,
+        }
+        cleaned_lang = (lang or "").strip()
+        if cleaned_lang:
+            message["lang"] = cleaned_lang
+        result.append(message)
     return result

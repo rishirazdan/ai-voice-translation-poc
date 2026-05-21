@@ -38,7 +38,7 @@ This is a standalone project, but the bet is sized against a real category: cont
 
 ## What We Learned from the PoC
 
-1. **Handoff is the hard part, not translation.** Most demos skip the step where an AI agent hands a live caller to a human without dropping the call. The seamless path (update the existing Twilio leg using `system__call_sid`) is what makes it feel real. The reconnect-via-callback fallback is a worse experience, so it ships off by default.
+1. **Handoff is the hard part, not translation.** Most demos skip the step where an AI agent hands a live caller to a human without dropping the call. The seamless path (update the existing Twilio leg using `system__call_sid`) is the preferred behavior and stays that way. But running as a managed service means we can't assume ElevenLabs always passes a live call SID, so the runtime defaults shifted: `REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF=false` and `ENABLE_CUSTOMER_RECONNECT=true`. The reconnect callback is the documented fallback, gated by a spoken announcement to the caller and a `FALLBACK_RECONNECT_USED` warning log. Strict seamless-only mode (`REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF=true`) is still one env flip away for deployments that demand it.
 2. **Latency budget lives in the TTS step, not the LLM.** Translation is fast. The estimated TTS playback (`ESTIMATED_TTS_MS_PER_TURN=650`) dominates perceived turn time. Optimizing the wrong stage would be wasted effort.
 3. **Logging policy matters earlier than you think.** No raw transcript text in logs, only event type, call SID, text length, and a short SHA-256 fingerprint. Doing this from day one removed a future compliance headache.
 
@@ -52,7 +52,7 @@ Ship the PoC as a service one small team could actually pilot. Concretely:
 2. **Integration test coverage.** Automated tests for the handoff endpoint and the websocket translation loop. The codebase has a mock translator already; wire it into a real test harness.
 3. **Provider failover.** If the OpenAI call fails or times out, degrade to source-language passthrough with a logged warning rather than dropping the turn.
 4. **Deployment profile.** A container build and a documented deploy target (Fly.io or Render) replacing the Cloudflare tunnel.
-5. **Operational dashboard.** Surface the latency metrics already collected, plus handoff success rate and translation error rate.
+5. **Operational dashboard.** Surface the latency metrics already collected, plus handoff success rate split by path (seamless vs reconnect fallback) and translation error rate.
 
 ---
 
@@ -70,7 +70,8 @@ Ship the PoC as a service one small team could actually pilot. Concretely:
 **Primary:** p95 turn latency under 2.5s end-to-end (ingest → translate → token emit → estimated TTS).
 
 **Guardrails:**
-- Handoff success rate above 95% when a valid `twilio_call_sid` is present.
+- Seamless handoff success rate above 95% when a valid `twilio_call_sid` is present.
+- Reconnect-fallback usage under 15% of total handoffs (signal that ElevenLabs config is healthy).
 - Translation error rate (provider failures, malformed responses) under 1% over a rolling 1k-turn window.
 - Zero raw transcript text in production logs (verified by log scan in CI).
 
@@ -118,6 +119,7 @@ Ship the PoC as a service one small team could actually pilot. Concretely:
 | Twilio ConversationRelay event-shape change | Parse failures in `models.py` | Ignore unknown event types (already implemented), alert on parse-failure rate |
 | Multi-worker session collision | Lost websocket on scale-out | Redis-backed session registry (in v1 scope) |
 | Caller language misdetection | Wrong target language in translated output | Default to `en-US` agent side, allow ElevenLabs to override `caller_language` at handoff |
+| ElevenLabs handoff without a live call SID | Missing `twilio_call_sid` in `/handoff/elevenlabs` payload | Reconnect-via-callback path with spoken announcement and `FALLBACK_RECONNECT_USED` log; flip to strict mode for deployments that require seamless-only |
 
 ---
 
@@ -126,6 +128,7 @@ Ship the PoC as a service one small team could actually pilot. Concretely:
 - [ ] Which deploy target — Fly.io vs Render vs a small ECS task? Decide based on websocket cold-start behavior.
 - [ ] Is the estimated TTS budget (`650ms`) close to reality with ElevenLabs? Worth measuring directly rather than estimating.
 - [ ] Do we want to capture turn-level transcripts (encrypted at rest) for QA, or stay metadata-only?
+- [ ] When do we recommend strict seamless-only mode (`REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF=true`)? Likely default for self-hosted deployments where the ElevenLabs config is under the customer's control; managed-service stays lenient.
 
 ---
 

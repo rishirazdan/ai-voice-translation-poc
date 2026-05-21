@@ -43,6 +43,7 @@ flowchart LR
 5. Language policy is explicit:
    - caller language can be auto-detected (`caller_language=auto`)
    - agent side remains English (`DEFAULT_AGENT_LANGUAGE=en-US`)
+   - auto detection uses Twilio `multi` mode with `TRANSCRIPTION_PROVIDER=Deepgram` and `TTS_PROVIDER=ElevenLabs`
 
 ## Components
 

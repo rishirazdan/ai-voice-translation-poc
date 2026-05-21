@@ -37,6 +37,24 @@ translator = create_translator(settings)
 registry = BridgeSessionRegistry()
 handoff_orchestrator = TwilioHandoffOrchestrator(settings)
 latency_tracker = LatencyTracker(sample_size=settings.latency_sample_size)
+detected_caller_language_by_session: dict[str, str] = {}
+PRIMARY_TO_BCP47 = {
+    "en": "en-US",
+    "sv": "sv-SE",
+    "es": "es-ES",
+    "fr": "fr-FR",
+    "de": "de-DE",
+    "pt": "pt-BR",
+    "it": "it-IT",
+    "hi": "hi-IN",
+    "ar": "ar-SA",
+    "ja": "ja-JP",
+    "ko": "ko-KR",
+    "zh": "zh-CN",
+    "nl": "nl-NL",
+    "pl": "pl-PL",
+    "tr": "tr-TR",
+}
 
 
 def _build_relay_for_leg(
@@ -51,10 +69,8 @@ def _build_relay_for_leg(
         language=language,
         transcriptionLanguage=transcription_language,
         ttsLanguage=tts_language,
-    )
-    relay.language(
-        code=transcription_language,
-        tts_provider=settings.tts_provider or None,
+        transcriptionProvider=settings.transcription_provider or None,
+        ttsProvider=settings.tts_provider or None,
     )
     return relay
 
@@ -88,6 +104,63 @@ def _pick_runtime_language(
         if value:
             return value
     return fallback
+
+
+def _normalize_language_for_relay(value: str, fallback: str) -> str:
+    safe_fallback = (fallback or "").strip() or "sv-SE"
+    if safe_fallback.lower() in {"auto", "multi"}:
+        safe_fallback = "sv-SE"
+    candidate = (value or "").strip()
+    if not candidate:
+        return safe_fallback
+    if candidate.lower() in {"auto", "multi"}:
+        return safe_fallback
+    return candidate
+
+
+def _transcription_language_for_relay(requested: str, fallback: str) -> str:
+    candidate = (requested or "").strip().lower()
+    if candidate == "auto":
+        return "multi"
+    return _normalize_language_for_relay(requested, fallback)
+
+
+def _tts_language_for_relay(requested: str, fallback: str) -> str:
+    candidate = (requested or "").strip().lower()
+    if candidate == "auto":
+        return "multi"
+    return _normalize_language_for_relay(requested, fallback)
+
+
+def _canonicalize_lang_for_token(value: str | None) -> str | None:
+    if not value:
+        return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    lowered = candidate.lower()
+    if lowered in {"auto", "multi"}:
+        return "multi"
+    if "-" in candidate:
+        return candidate
+    mapped = PRIMARY_TO_BCP47.get(lowered)
+    if mapped:
+        return mapped
+    return candidate
+
+
+def _extract_error_meta(payload: dict[str, object]) -> tuple[object, object]:
+    code = payload.get("code") or payload.get("errorCode")
+    message = payload.get("message") or payload.get("errorMessage")
+    if code or message:
+        return code, message
+    error_node = payload.get("error")
+    if isinstance(error_node, dict):
+        return error_node.get("code"), error_node.get("message")
+    details_node = payload.get("details")
+    if isinstance(details_node, dict):
+        return details_node.get("code"), details_node.get("message")
+    return None, None
 
 
 async def _validate_twilio_signature(request: Request) -> None:
@@ -138,11 +211,20 @@ async def health() -> dict[str, str | int]:
 async def voice_incoming(request: Request) -> Response:
     await _validate_twilio_signature(request)
     form_data = await request.form()
-    caller_language = _pick_runtime_language(
+    requested_caller_language = _pick_runtime_language(
         request,
         form_data,
         keys=("caller_language", "caller_lang", "source_language", "language"),
         fallback=settings.default_caller_language,
+    )
+    relay_language = _normalize_language_for_relay(
+        requested_caller_language, settings.default_caller_language
+    )
+    caller_transcription_language = _transcription_language_for_relay(
+        requested_caller_language, settings.default_caller_language
+    )
+    caller_tts_language = _tts_language_for_relay(
+        requested_caller_language, settings.default_caller_language
     )
     explicit_agent_language = _pick_runtime_language(
         request,
@@ -159,7 +241,7 @@ async def voice_incoming(request: Request) -> Response:
         {
             "session_id": session_id,
             "leg": "caller",
-            "caller_lang": caller_language,
+            "caller_lang": requested_caller_language or settings.default_caller_language,
             "agent_lang": agent_language,
         }
     )
@@ -170,18 +252,21 @@ async def voice_incoming(request: Request) -> Response:
     connect.append(
         _build_relay_for_leg(
             url=relay_url,
-            language=caller_language,
-            transcription_language=caller_language,
-            tts_language=caller_language,
+            language=relay_language,
+            transcription_language=caller_transcription_language,
+            tts_language=caller_tts_language,
         )
     )
     twiml.append(connect)
 
     logger.info(
-        "Issued ConversationRelay TwiML session_id=%s call_sid=%s caller_lang=%s agent_lang=%s ws=%s",
+        "Issued ConversationRelay TwiML session_id=%s call_sid=%s caller_lang=%s requested_caller_lang=%s stt_lang=%s tts_lang=%s agent_lang=%s ws=%s",
         session_id,
         call_sid,
-        caller_language,
+        relay_language,
+        requested_caller_language,
+        caller_transcription_language,
+        caller_tts_language,
         agent_language,
         settings.conversation_relay_ws_path,
     )
@@ -230,6 +315,15 @@ async def conversationrelay_ws(websocket: WebSocket) -> None:
                 continue
 
             event = parse_conversationrelay_event(payload)
+            source_from_event = (event.source_language or "").strip()
+            if (
+                participant.leg == "caller"
+                and source_from_event
+                and source_from_event.lower() not in {"auto", "multi"}
+            ):
+                detected_caller_language_by_session[session_id] = (
+                    _canonicalize_lang_for_token(source_from_event) or source_from_event
+                )
             text_info = safe_text_fingerprint(event.text)
             logger.info(
                 "WS event session_id=%s leg=%s type=%s call_sid=%s text_len=%s text_sha=%s",
@@ -240,6 +334,15 @@ async def conversationrelay_ws(websocket: WebSocket) -> None:
                 text_info["length"],
                 text_info["sha256_12"],
             )
+            if event.event_type.strip().lower() == "error":
+                code, message = _extract_error_meta(payload)
+                logger.warning(
+                    "ConversationRelay error event session_id=%s leg=%s code=%s message=%s",
+                    session_id,
+                    participant.leg,
+                    code,
+                    message,
+                )
 
             normalized = event.event_type.lower()
             if normalized == "ping":
@@ -254,16 +357,24 @@ async def conversationrelay_ws(websocket: WebSocket) -> None:
             turn_start = time.perf_counter()
             source = event.source_language
             target = event.target_language
+            effective_caller_lang = detected_caller_language_by_session.get(session_id)
+            if not effective_caller_lang:
+                fallback_caller = _normalize_language_for_relay(caller_lang, settings.default_caller_language)
+                effective_caller_lang = fallback_caller
             if not source or not target:
                 if participant.leg == "caller":
-                    source = source or caller_lang
+                    source = source or effective_caller_lang
                     target = target or agent_lang
                 elif participant.leg == "agent":
                     source = source or agent_lang
-                    target = target or caller_lang
+                    target = target or effective_caller_lang
                 else:
-                    source = source or caller_lang
+                    source = source or effective_caller_lang
                     target = target or agent_lang
+            if isinstance(source, str) and source.lower() in {"auto", "multi"}:
+                source = effective_caller_lang if participant.leg == "caller" else agent_lang
+            if isinstance(target, str) and target.lower() in {"auto", "multi"}:
+                target = effective_caller_lang if participant.leg == "agent" else agent_lang
             translate_start = time.perf_counter()
             translated = await translator.translate(
                 event.text,
@@ -273,7 +384,11 @@ async def conversationrelay_ws(websocket: WebSocket) -> None:
             )
             translate_done = time.perf_counter()
 
-            token_messages = build_token_messages(translated)
+            token_lang = _canonicalize_lang_for_token(target)
+            caller_lang_mode = (caller_lang or "").strip().lower()
+            if participant.leg == "agent" and caller_lang_mode == "auto":
+                token_lang = "multi"
+            token_messages = build_token_messages(translated, lang=token_lang)
             token_emit_start = time.perf_counter()
             counterpart = registry.get_counterpart(participant)
             if counterpart is None:
@@ -336,6 +451,8 @@ async def conversationrelay_ws(websocket: WebSocket) -> None:
         await websocket.close(code=1011)
     finally:
         registry.unregister(participant)
+        if registry.participant_count(session_id) == 0:
+            detected_caller_language_by_session.pop(session_id, None)
 
 
 @app.post("/handoff/elevenlabs", response_model=ElevenLabsHandoffResponse)

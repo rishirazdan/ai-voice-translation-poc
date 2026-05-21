@@ -209,10 +209,52 @@ def is_valid_twilio_call_sid(value: str | None) -> bool:
     return bool(TWILIO_CALL_SID_PATTERN.match(value.strip()))
 
 
+def is_placeholder_twilio_call_sid(value: str | None) -> bool:
+    if not value:
+        return False
+    sid = value.strip()
+    if not sid:
+        return False
+    if "{{" in sid or "}}" in sid or "..." in sid:
+        return True
+    normalized = sid.lower()
+    known_placeholders = {
+        "ca0123456789abcdef0123456789abcdef",
+        "ca1234567890abcdef1234567890abcd",
+    }
+    return normalized in known_placeholders
+
+
 def normalize_phone(phone_number: str | None) -> str:
     if not phone_number:
         return ""
     return re.sub(r"\D", "", phone_number)
+
+
+def normalize_language_for_relay(value: str | None, fallback: str) -> str:
+    safe_fallback = (fallback or "").strip() or "sv-SE"
+    if safe_fallback.lower() in {"auto", "multi"}:
+        safe_fallback = "sv-SE"
+    candidate = (value or "").strip()
+    if not candidate:
+        return safe_fallback
+    if candidate.lower() in {"auto", "multi"}:
+        return safe_fallback
+    return candidate
+
+
+def transcription_language_for_relay(value: str | None, fallback: str) -> str:
+    candidate = (value or "").strip().lower()
+    if candidate == "auto":
+        return "multi"
+    return normalize_language_for_relay(value, fallback)
+
+
+def tts_language_for_relay(value: str | None, fallback: str) -> str:
+    candidate = (value or "").strip().lower()
+    if candidate == "auto":
+        return "multi"
+    return normalize_language_for_relay(value, fallback)
 
 
 def safe_reason_fingerprint(reason: str | None, context_summary: str | None) -> str | None:
@@ -235,6 +277,7 @@ def relay_twiml(
     language: str,
     transcription_language: str,
     tts_language: str,
+    transcription_provider: str,
     tts_provider: str,
 ) -> str:
     response = VoiceResponse()
@@ -244,10 +287,8 @@ def relay_twiml(
         language=language,
         transcriptionLanguage=transcription_language,
         ttsLanguage=tts_language,
-    )
-    relay.language(
-        code=tts_language,
-        tts_provider=tts_provider or None,
+        transcriptionProvider=transcription_provider or None,
+        ttsProvider=tts_provider or None,
     )
     connect.append(relay)
     response.append(connect)
@@ -260,6 +301,7 @@ def reconnect_relay_twiml(
     language: str,
     transcription_language: str,
     tts_language: str,
+    transcription_provider: str,
     tts_provider: str,
     announcement: str,
 ) -> str:
@@ -272,10 +314,8 @@ def reconnect_relay_twiml(
         language=language,
         transcriptionLanguage=transcription_language,
         ttsLanguage=tts_language,
-    )
-    relay.language(
-        code=tts_language,
-        tts_provider=tts_provider or None,
+        transcriptionProvider=transcription_provider or None,
+        ttsProvider=tts_provider or None,
     )
     connect.append(relay)
     response.append(connect)
@@ -330,15 +370,33 @@ class TwilioHandoffOrchestrator:
 
         try:
             client = self._client()
-            caller_lang = payload.caller_language or self.settings.default_caller_language
+            requested_caller_lang = payload.caller_language or self.settings.default_caller_language
+            caller_lang = normalize_language_for_relay(
+                requested_caller_lang, self.settings.default_caller_language
+            )
+            caller_transcription_lang = transcription_language_for_relay(
+                requested_caller_lang, self.settings.default_caller_language
+            )
+            caller_tts_lang = tts_language_for_relay(
+                requested_caller_lang, self.settings.default_caller_language
+            )
             _ = payload.agent_language  # accepted for compatibility, ignored by policy
             agent_lang = self.settings.default_agent_language
+            if caller_lang != requested_caller_lang:
+                logger.info(
+                    "Normalized caller language for relay requested=%s effective=%s stt=%s tts=%s session_id=%s",
+                    requested_caller_lang,
+                    caller_lang,
+                    caller_transcription_lang,
+                    caller_tts_lang,
+                    session_id,
+                )
             websocket_base_url = get_runtime_websocket_url(self.settings)
             customer_query = urlencode(
                 {
                     "session_id": session_id,
                     "leg": "caller",
-                    "caller_lang": caller_lang,
+                    "caller_lang": requested_caller_lang,
                     "agent_lang": agent_lang,
                 }
             )
@@ -346,15 +404,16 @@ class TwilioHandoffOrchestrator:
                 {
                     "session_id": session_id,
                     "leg": "agent",
-                    "caller_lang": caller_lang,
+                    "caller_lang": requested_caller_lang,
                     "agent_lang": agent_lang,
                 }
             )
             customer_leg_twiml = relay_twiml(
                 f"{websocket_base_url}?{customer_query}",
                 language=caller_lang,
-                transcription_language=caller_lang,
-                tts_language=caller_lang,
+                transcription_language=caller_transcription_lang,
+                tts_language=caller_tts_lang,
+                transcription_provider=self.settings.transcription_provider,
                 tts_provider=self.settings.tts_provider,
             )
             agent_leg_twiml = relay_twiml(
@@ -362,10 +421,17 @@ class TwilioHandoffOrchestrator:
                 language=agent_lang,
                 transcription_language=agent_lang,
                 tts_language=agent_lang,
+                transcription_provider=self.settings.transcription_provider,
                 tts_provider=self.settings.tts_provider,
             )
 
             twilio_call_sid = (payload.twilio_call_sid or "").strip() or None
+            if is_placeholder_twilio_call_sid(twilio_call_sid):
+                logger.warning(
+                    "Ignoring placeholder twilio_call_sid and switching to reconnect fallback session_id=%s",
+                    session_id,
+                )
+                twilio_call_sid = None
             customer_call_sid: str | None = None
             if self.settings.require_active_call_sid_for_handoff and not twilio_call_sid:
                 raise HandoffConfigError(
@@ -377,8 +443,27 @@ class TwilioHandoffOrchestrator:
                     raise HandoffConfigError(
                         "twilio_call_sid is present but invalid. Expected Twilio Call SID format: CA + 32 hex chars."
                     )
-                client.calls(twilio_call_sid).update(twiml=customer_leg_twiml)
+                try:
+                    client.calls(twilio_call_sid).update(twiml=customer_leg_twiml)
+                except TwilioRestException as exc:
+                    if (
+                        exc.code == 20404
+                        and self.settings.enable_customer_reconnect
+                        and is_valid_e164(customer_number)
+                    ):
+                        logger.warning(
+                            "Active call sid not found; switching to reconnect fallback session_id=%s",
+                            session_id,
+                        )
+                        twilio_call_sid = None
+                    else:
+                        raise
             else:
+                if self.settings.require_active_call_sid_for_handoff:
+                    raise HandoffConfigError(
+                        "Customer callback path is disabled. Provide a valid twilio_call_sid from ElevenLabs."
+                    )
+            if not twilio_call_sid:
                 if self.settings.require_active_call_sid_for_handoff:
                     raise HandoffConfigError(
                         "Customer callback path is disabled. Provide a valid twilio_call_sid from ElevenLabs."
@@ -394,8 +479,9 @@ class TwilioHandoffOrchestrator:
                     customer_reconnect_twiml = reconnect_relay_twiml(
                         f"{websocket_base_url}?{customer_query}",
                         language=caller_lang,
-                        transcription_language=caller_lang,
-                        tts_language=caller_lang,
+                        transcription_language=caller_transcription_lang,
+                        tts_language=caller_tts_lang,
+                        transcription_provider=self.settings.transcription_provider,
                         tts_provider=self.settings.tts_provider,
                         announcement=self.settings.customer_reconnect_announcement,
                     )

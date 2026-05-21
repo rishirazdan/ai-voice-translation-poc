@@ -68,6 +68,7 @@ class Settings:
     estimated_tts_ms_per_turn: float
     log_level: str
     tts_provider: str
+    transcription_provider: str
 
     @property
     def websocket_url(self) -> str:
@@ -85,7 +86,7 @@ class Settings:
             conversation_relay_ws_path=os.getenv(
                 "CONVERSATION_RELAY_WS_PATH", "/ws/conversationrelay"
             ),
-            default_caller_language=os.getenv("DEFAULT_CALLER_LANGUAGE", "auto"),
+            default_caller_language=os.getenv("DEFAULT_CALLER_LANGUAGE", "sv-SE"),
             default_agent_language=os.getenv("DEFAULT_AGENT_LANGUAGE", "en-US"),
             translation_provider=os.getenv("TRANSLATION_PROVIDER", "mock").strip().lower(),
             openai_api_key=os.getenv("OPENAI_API_KEY", ""),
@@ -112,6 +113,7 @@ class Settings:
             estimated_tts_ms_per_turn=_as_float(os.getenv("ESTIMATED_TTS_MS_PER_TURN"), 650.0),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             tts_provider=os.getenv("TTS_PROVIDER", "ElevenLabs").strip(),
+            transcription_provider=os.getenv("TRANSCRIPTION_PROVIDER", "Deepgram").strip(),
         )
 
 

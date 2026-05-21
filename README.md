@@ -39,11 +39,13 @@ High-level flow:
    - Uses active `twilio_call_sid` from ElevenLabs (`system__call_sid`) when present.
 2. **Automatic reconnect fallback (default path when SID is missing)**
    - Enabled by default with `ENABLE_CUSTOMER_RECONNECT=true`.
+   - Also used when ElevenLabs sends a placeholder/non-existent `twilio_call_sid`.
    - Can be disabled by setting `REQUIRE_ACTIVE_CALL_SID_FOR_HANDOFF=true`.
    - Emits explicit fallback warning logs.
 3. **Agent-side language policy**
    - Agent remains English (`DEFAULT_AGENT_LANGUAGE=en-US`).
-   - Caller language can be auto-detected (`caller_language=auto`).
+   - `caller_language=auto` enables Twilio `multi` STT/TTS mode for dynamic caller-language detection.
+   - Caller detected language is used to route agent-to-caller translation target during the session.
 4. **Provider abstraction**
    - `mock` translator for deterministic testing.
    - `openai` translator for live translation.
@@ -89,6 +91,9 @@ For portfolio/recruiter review, add:
 1. PoC-level runtime resilience (single-process, in-memory session state).
 2. Tunnel-based local exposure for demos (not production hosting).
 3. No persistent conversation storage/analytics pipeline.
+4. `auto` language detection depends on Twilio `multi` mode compatibility:
+   - `TRANSCRIPTION_PROVIDER=Deepgram`
+   - `TTS_PROVIDER=ElevenLabs`
 
 ## Next Milestones
 

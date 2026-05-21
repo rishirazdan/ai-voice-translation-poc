@@ -31,6 +31,8 @@ Edit `.env` values:
 - `DEFAULT_HUMAN_AGENT_NUMBER=+1...`
 - `DEFAULT_CALLER_LANGUAGE=auto`
 - `DEFAULT_AGENT_LANGUAGE=en-US`
+- `TRANSCRIPTION_PROVIDER=Deepgram` (required when `DEFAULT_CALLER_LANGUAGE=auto`)
+- `TTS_PROVIDER=ElevenLabs` (required when `DEFAULT_CALLER_LANGUAGE=auto`)
 - `TRANSLATION_PROVIDER=mock` (or `openai`)
 - `HANDOFF_DRY_RUN=true` for local MVP checks
 - `ELEVENLABS_HANDOFF_SECRET=...`
