@@ -2,7 +2,7 @@
 
 Near-real-time bilingual call support PoC with AI-first intake and human handoff.
 
-## Resume Summary
+## Summary
 
 Built a live call translation MVP that:
 
