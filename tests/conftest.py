@@ -48,6 +48,7 @@ def _make_test_settings(**overrides: object) -> Settings:
         estimated_tts_ms_per_turn=650.0,
         log_level="INFO",
         tts_provider="ElevenLabs",
+        transcription_provider="Deepgram",
     )
     return replace(base, **overrides)  # type: ignore[arg-type]
 
